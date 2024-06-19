@@ -4,18 +4,23 @@ export class MentalHealthAwarenessListingGrid {
    */
   constructor(page) {
     this.page = page;
+
     this.newDataButton = page
       .frameLocator('iframe[name="data-collection-iframe"]')
       .getByRole('button', { name: 'New Data' });
+
     this.importDataButton = page
       .frameLocator('iframe[name="data-collection-iframe"]')
       .getByRole('button', { name: 'Import Data' });
+
     this.tableBody = page
       .frameLocator('iframe[name="data-collection-iframe"]')
       .locator('table.sorted-table > tbody');
+
     this.lastRow = page
       .frameLocator('iframe[name="data-collection-iframe"]')
       .locator('table.sorted-table > tbody > tr:last-child');
+
     this.lastRowLink = page
       .frameLocator('iframe[name="data-collection-iframe"]')
       .locator(

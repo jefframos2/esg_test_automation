@@ -4,19 +4,19 @@ export class Header {
    */
   constructor(page) {
     this.page = page;
-    this.homeTab = this.page.getByRole('link', { name: 'Home' });
-    this.dataCollectionTab = this.page.getByRole('link', {
+    this.homeTab = page.getByRole('link', { name: 'Home' });
+    this.dataCollectionTab = page.getByRole('link', {
       name: 'Data Collection',
     });
-    this.disclosuresTab = this.page.getByRole('link', {
+    this.disclosuresTab = page.getByRole('link', {
       name: 'Disclosures',
     });
-    this.reportsTab = this.page.getByRole('link', {
+    this.reportsTab = page.getByRole('link', {
       name: 'Reports',
     });
-    this.goalsTab = this.page.getByRole('link', { name: 'Goals' });
-    this.tasksTab = this.page.getByRole('link', { name: 'Tasks' });
-    this.adminTab = this.page.getByRole('link', { name: 'Admin' });
+    this.goalsTab = page.getByRole('link', { name: 'Goals' });
+    this.tasksTab = page.getByRole('link', { name: 'Tasks' });
+    this.adminTab = page.getByRole('link', { name: 'Admin' });
   }
 
   /**
