@@ -4,9 +4,9 @@ export class LoginPage {
    */
   constructor(page) {
     this.page = page;
-    this.usernameField = this.page.getByLabel('Username');
-    this.passwordField = this.page.getByLabel('Password');
-    this.loginButton = this.page.getByRole('button', { name: 'Login' });
+    this.usernameField = page.getByLabel('Username');
+    this.passwordField = page.getByLabel('Password');
+    this.loginButton = page.getByRole('button', { name: 'Login' });
   }
 
   /**
