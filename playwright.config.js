@@ -72,7 +72,7 @@ export default defineConfig({
     //   use: { ...devices['Desktop Chrome'], channel: 'chrome' },
     // },
   ],
-  timeout: 60000,
+  timeout: 1 * 60 * 1000,
   expect: {
     timeout: 10000,
   },
