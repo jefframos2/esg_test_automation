@@ -1,5 +1,7 @@
 //Libraries
 import { test, expect } from '@playwright/test';
+import fs from 'fs';
+import { join } from 'path';
 
 // Test Data
 import {
@@ -28,9 +30,62 @@ import {
   assertMentalHealthListingGrid,
 } from '../../../utils/social/mental_health_awareness/assertion_utils';
 import { hasRow } from '../../../utils/listing_grid_utils';
+import { Collection } from '../../../utils/db_collection';
 
 // Use the login cookie created from auth.setup.js so we don't have to re-login on every test
 test.use({ storageState: '.auth/adminUser.json' });
+
+test.beforeAll(async ({ baseURL }) => {
+  // Get the login cookies of the admin user that is stored in adminUser.json
+  const adminUser = fs.readFileSync(
+    join(__dirname, '../../../.auth/adminUser.json'),
+    'utf8'
+  );
+
+  // Get the elx-amb cookie of the admin user
+  const eLxAmbCookie = JSON.parse(adminUser).cookies.find(
+    (cookie) => cookie.name === 'elx-amb'
+  ).value;
+
+  const mentalHealthAwarenessDataCollection = new Collection(
+    baseURL,
+    'Mental Health Awareness Data Collection'
+  );
+
+  // Get the count of documents in Mental Health Awaress Data Collection
+  const mentalHealthAwarenessDocumentsCount =
+    await mentalHealthAwarenessDataCollection.getDocumentCount(eLxAmbCookie);
+
+  // Get all documents in Mental Health Awareness Data Collection
+  // Returns JSONL (newline character delimited JSON Data)
+  const mentalHealthAwarenessDocumentsJSONL =
+    await mentalHealthAwarenessDataCollection.getAllDocuments(
+      eLxAmbCookie,
+      mentalHealthAwarenessDocumentsCount
+    );
+
+  // Convert JSONL to an array of JSON
+  // Value will be an array with empty string (i.e. ['']) if there are no documents in the collection
+  const mentalHealthAwarenessDocumentsArray =
+    mentalHealthAwarenessDocumentsJSONL.split('\n');
+
+  // If there are Mental Health Awareness Data Collection documents retrieved
+  if (mentalHealthAwarenessDocumentsArray[0]) {
+    // The ids will be passed to deleteDocuments method
+    const ids = [];
+    mentalHealthAwarenessDocumentsArray.forEach((document) => {
+      ids.push(JSON.parse(document)._id);
+    });
+
+    // Delete all documents in Mental Health Awareness Data Collection before running the tests
+    await mentalHealthAwarenessDataCollection.deleteDocuments(
+      eLxAmbCookie,
+      ...ids
+    );
+  }
+
+  // TODO: Seed the DB before running the tests
+});
 
 test.beforeEach(async ({ page }) => {
   // Go to Home Page on start of every test
