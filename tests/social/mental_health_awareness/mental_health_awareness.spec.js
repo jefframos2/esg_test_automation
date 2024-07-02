@@ -1,18 +1,18 @@
 //Libraries
 import { test, expect } from '@playwright/test';
-import fs from 'fs';
-import { join } from 'path';
 
 // Test Data
 import {
   formInputCreate,
   formInputUpdate,
+  importFileData,
 } from '../../../data/input/mental_health_awareness/mental_health_awareness_form_input';
 import {
   expectedGridValuesAfterSubmit,
   expectedGridValuesAfterEdit,
   expectedGridValuesAfterImport,
 } from '../../../data/output/mental_health_awareness/mental_health_awaress_grid';
+import { generateMentalHealthAwarenessInputData } from '../../../data_factory/mental_health_awareness';
 
 // Page Object Models
 import { Carousel } from '../../../page_objects/carousel';
@@ -28,61 +28,26 @@ import { MentalHealthAwarenessImportDataForm } from '../../../page_objects/socia
 import {
   assertMentalHealthAwarenessSummary,
   assertMentalHealthListingGrid,
+  getExpectedSummaryValuesFromDocument,
 } from '../../../utils/social/mental_health_awareness/assertion_utils';
 import { hasRow } from '../../../utils/listing_grid_utils';
 import { Collection } from '../../../utils/db_collection';
+import {
+  getElxAmbCookie,
+  getDocumentIdFromSummaryURL,
+  formatDateAsDDMMYYYY,
+} from '../../../utils/helpers';
+import {
+  clearCollection,
+  getDocumentFromCollection,
+} from '../../../utils/db_utils';
 
 // Use the login cookie created from auth.setup.js so we don't have to re-login on every test
 test.use({ storageState: '.auth/adminUser.json' });
 
 test.beforeAll(async ({ baseURL }) => {
-  // Get the login cookies of the admin user that is stored in adminUser.json
-  const adminUser = fs.readFileSync(
-    join(__dirname, '../../../.auth/adminUser.json'),
-    'utf8'
-  );
-
-  // Get the elx-amb cookie of the admin user
-  const eLxAmbCookie = JSON.parse(adminUser).cookies.find(
-    (cookie) => cookie.name === 'elx-amb'
-  ).value;
-
-  const mentalHealthAwarenessDataCollection = new Collection(
-    baseURL,
-    'Mental Health Awareness Data Collection'
-  );
-
-  // Get the count of documents in Mental Health Awaress Data Collection
-  const mentalHealthAwarenessDocumentsCount =
-    await mentalHealthAwarenessDataCollection.getDocumentCount(eLxAmbCookie);
-
-  // Get all documents in Mental Health Awareness Data Collection
-  // Returns JSONL (newline character delimited JSON Data)
-  const mentalHealthAwarenessDocumentsJSONL =
-    await mentalHealthAwarenessDataCollection.getAllDocuments(
-      eLxAmbCookie,
-      mentalHealthAwarenessDocumentsCount
-    );
-
-  // Convert JSONL to an array of JSON
-  // Value will be an array with empty string (i.e. ['']) if there are no documents in the collection
-  const mentalHealthAwarenessDocumentsArray =
-    mentalHealthAwarenessDocumentsJSONL.split('\n');
-
-  // If there are Mental Health Awareness Data Collection documents retrieved
-  if (mentalHealthAwarenessDocumentsArray[0]) {
-    // The ids will be passed to deleteDocuments method
-    const ids = [];
-    mentalHealthAwarenessDocumentsArray.forEach((document) => {
-      ids.push(JSON.parse(document)._id);
-    });
-
-    // Delete all documents in Mental Health Awareness Data Collection before running the tests
-    await mentalHealthAwarenessDataCollection.deleteDocuments(
-      eLxAmbCookie,
-      ...ids
-    );
-  }
+  // Delete all the documents in Mental Health Awareness collection
+  await clearCollection(baseURL, 'Mental Health Awareness Data Collection');
 
   // TODO: Seed the DB before running the tests
 });
@@ -104,7 +69,7 @@ test.beforeEach(async ({ page }) => {
   );
 });
 
-test('Submit new data via data collection form', async ({ page }) => {
+test('Submit new data via data collection form', async ({ page, baseURL }) => {
   // Click New Data button
   const mentalHealthAwarenessListingGrid = new MentalHealthAwarenessListingGrid(
     page
@@ -116,14 +81,28 @@ test('Submit new data via data collection form', async ({ page }) => {
     page.getByText('New Mental Health Awareness Data')
   ).toBeVisible();
 
+  // Generate random form input data
+  const elxAmbCookie = getElxAmbCookie();
+  const formInput = await generateMentalHealthAwarenessInputData(
+    baseURL,
+    elxAmbCookie,
+    'test_collab'
+  );
+
   // Fill out form fields and submit
   const mentalHealthAwarenessDataCollectionForm =
     new MentalHealthAwarenessDataCollectionForm(page);
-  await mentalHealthAwarenessDataCollectionForm.fillOutForm(formInputCreate);
+  await mentalHealthAwarenessDataCollectionForm.fillOutForm(formInput);
+  await page.waitForTimeout(2000); // for debugging since there are times when nothing happens on click of Submit
   await mentalHealthAwarenessDataCollectionForm.submitForm();
 
   // Assertions - Check the values on read-only form after submission
-  await assertMentalHealthAwarenessSummary(formInputCreate, page, expect);
+  await assertMentalHealthAwarenessSummary(formInput, page, expect);
+
+  // Get the id of the created Mental Health Awareness document from the URL
+  // const createdMentalHealthAwarenessDocumentId = new URL(page.url()).pathname
+  //   .split('/')
+  //   .at(-2);
 
   // Return to dashboard
   const mentalHealthAwarenessSummary = new MentalHealthAwarenessSummary(page);
@@ -149,17 +128,14 @@ test('Submit new data via data collection form', async ({ page }) => {
   await sidePanel.deselectAllStatus();
 
   // Assertions - Check each column value of the last data row of the dashboard listing grid
-  await assertMentalHealthListingGrid(
-    expectedGridValuesAfterSubmit,
-    page,
-    expect
-  );
+  await assertMentalHealthListingGrid(formInput, page, expect);
 
   //TODO DB record assertions - need to be able to programatically connect to the database
 });
 
 test('View data by clicking on the link in the dashboard listing grid', async ({
   page,
+  baseURL,
 }) => {
   // Wait for listing grid title to be visible. Once visible, it means that grid should already be visible too.
   await expect(
@@ -186,15 +162,34 @@ test('View data by clicking on the link in the dashboard listing grid', async ({
 
   if (hasAtLeastOneRow) {
     // Click the Reporting Period From link of the last record in the grid
-
     await mentalHealthAwarenessListingGrid.clickLastRowLink();
 
-    // Assertions - Check the values on read-only form after clicking Reporting Period From link
-    await assertMentalHealthAwarenessSummary(formInputCreate, page, expect);
+    // Get the document id of the row that was clicked
+    const selectedRowDocumentId = getDocumentIdFromSummaryURL(page.url());
+
+    // Get the document from the database
+    const selectedMentalHealthAwarenessDocument =
+      await getDocumentFromCollection(
+        baseURL,
+        'Mental Health Awareness Data Collection',
+        selectedRowDocumentId
+      );
+
+    // Get the expected summary values based on the document that was retrieved
+    const expectedSummaryValues = getExpectedSummaryValuesFromDocument(
+      selectedMentalHealthAwarenessDocument
+    );
+
+    // Assertions - Check the values on read-only form (Summary) after clicking Reporting Period From link
+    await assertMentalHealthAwarenessSummary(
+      expectedSummaryValues,
+      page,
+      expect
+    );
   }
 });
 
-test('Update existing data', async ({ page }) => {
+test('Update existing data', async ({ page, baseURL }) => {
   // Wait for listing grid title to be visible. Once visible, it means that grid should already be visible too.
   await expect(
     page
@@ -225,54 +220,57 @@ test('Update existing data', async ({ page }) => {
     // Click Edit button on the Summary page
     const mentalHealthAwarenessSummary = new MentalHealthAwarenessSummary(page);
     await mentalHealthAwarenessSummary.clickEditButton();
+
+    // Check form title
+    await expect(
+      page.getByText('Update Mental Health Awareness Data')
+    ).toBeVisible();
+
+    // Generate random form input data
+    const elxAmbCookie = getElxAmbCookie();
+    const formInput = await generateMentalHealthAwarenessInputData(
+      baseURL,
+      elxAmbCookie,
+      'test_collab'
+    );
+
+    // Fill out form fields
+    const mentalHealthAwarenessDataCollectionForm =
+      new MentalHealthAwarenessDataCollectionForm(page);
+    await mentalHealthAwarenessDataCollectionForm.fillOutForm(formInput);
+
+    // Provide amendment reason
+    await mentalHealthAwarenessDataCollectionForm.provideAmendmentReason(
+      formInput.amendmentReason
+    );
+
+    // Amend the data
+    await mentalHealthAwarenessDataCollectionForm.amendData();
+
+    // Assertions - Check the values on read-only form (Summary) after amending the data
+    await assertMentalHealthAwarenessSummary(formInput, page, expect);
+
+    // Return to dashboard
+    await mentalHealthAwarenessSummary.clickCancelButton();
+
+    // Check that user is redirected back to the dashboard
+    await expect(page).toHaveURL(
+      '/cms/dashboard/datacollection.html?initialPage=Mental%20Health%20Awareness'
+    );
+
+    // Wait for listing grid title to be visible. Once visible, it means that grid should already be visible too.
+    await expect(
+      page
+        .frameLocator('iframe[name="data-collection-iframe"]')
+        .locator('#gridbox-MentalHealthAwareness1V')
+        .getByText('Mental Health Awareness', { exact: true })
+    ).toBeVisible();
+
+    // Assertions - Check each column value of the last data row of the dashboard listing grid
+    await assertMentalHealthListingGrid(formInput, page, expect);
+
+    //TODO DB record assertions - need to be able to programatically connect to the database
   }
-
-  // Check form title
-  await expect(
-    page.getByText('Update Mental Health Awareness Data')
-  ).toBeVisible();
-
-  // Fill out form fields
-  const mentalHealthAwarenessDataCollectionForm =
-    new MentalHealthAwarenessDataCollectionForm(page);
-  await mentalHealthAwarenessDataCollectionForm.fillOutForm(formInputUpdate);
-
-  // Provide amendment reason
-  await mentalHealthAwarenessDataCollectionForm.provideAmendmentReason(
-    formInputUpdate.amendmentReason
-  );
-
-  // Amend
-  await mentalHealthAwarenessDataCollectionForm.amendData();
-
-  // Assertions - Check the values on read-only form after submission
-  await assertMentalHealthAwarenessSummary(formInputUpdate, page, expect);
-
-  // Return to dashboard
-  const mentalHealthAwarenessSummary = new MentalHealthAwarenessSummary(page);
-  await mentalHealthAwarenessSummary.clickCancelButton();
-
-  // Check that user is redirected back to the dashboard
-  await expect(page).toHaveURL(
-    '/cms/dashboard/datacollection.html?initialPage=Mental%20Health%20Awareness'
-  );
-
-  // Wait for listing grid title to be visible. Once visible, it means that grid should already be visible too.
-  await expect(
-    page
-      .frameLocator('iframe[name="data-collection-iframe"]')
-      .locator('#gridbox-MentalHealthAwareness1V')
-      .getByText('Mental Health Awareness', { exact: true })
-  ).toBeVisible();
-
-  // Assertions - Check each column value of the last data row of the dashboard listing grid
-  await assertMentalHealthListingGrid(
-    expectedGridValuesAfterEdit,
-    page,
-    expect
-  );
-
-  //TODO DB record assertions - need to be able to programatically connect to the database
 });
 
 test('Delete existing data', async ({ page }) => {
@@ -404,11 +402,7 @@ test('Submit new data via import file', async ({ page }) => {
   await sidePanel.deselectAllStatus();
 
   // Assertions - Check each column value of the last data row of the dashboard listing grid
-  await assertMentalHealthListingGrid(
-    expectedGridValuesAfterImport,
-    page,
-    expect
-  );
+  await assertMentalHealthListingGrid(importFileData, page, expect);
 
   //TODO DB record assertions - need to be able to programatically connect to database
 });

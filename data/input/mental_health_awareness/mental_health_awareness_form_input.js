@@ -31,3 +31,18 @@ export const formInputUpdate = {
   amendmentReason:
     'Lorem ipsum dolor sit amet, consectetur adipiscing elit, sed do eiusmod tempor incididunt ut labore et dolore magna aliqua. Scelerisque felis imperdiet proin fermentum leo. Leo in vitae turpis massa sed.',
 };
+
+export const importFileData = {
+  location: 'Hong Kong',
+  reportingDateFrom: '01/03/2024',
+  reportingDateTo: '30/03/2024',
+  numMentalHealthProgram: '2000',
+  numMentalHealthActivities: '2001',
+  numParticipantsMentalHealthActivities: '2002',
+  numMentalHealthProf: '2003',
+  avgHrsTraining: '2004',
+  companyType: 'Operating company',
+  developingCounselingProg: 'No',
+  developingRegularSubstanceTest: 'Yes',
+  developingAccessMentalHealthCare: 'No',
+};

@@ -8,6 +8,7 @@
  * @returns {Promise<boolean>} true if the grid contains at lease one row. Otherwise, false
  */
 export const hasRow = async (listingGridObj, { error: { msg } }) => {
+  // TODO remove error argument used for debugging
   // Wait for the last row of the listing grid to be visible. If no error is thrown, it means that at least one row exists. Return true
   // Otherwise (timeout error is thrown), return false
   try {
